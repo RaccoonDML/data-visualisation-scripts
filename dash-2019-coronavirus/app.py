@@ -17,14 +17,15 @@ from dash.dependencies import Input, Output
 ################################################################################
 #### Data processing
 ################################################################################
-# Import xlsx file and store each sheet in to a df list
-xl_file = pd.ExcelFile('./data.xlsx',)
+# Import xls file and store each sheet in to a df list
+xl_file = pd.ExcelFile('./data_agg/data_agg/data.xls')
 
 dfs = {sheet_name: xl_file.parse(sheet_name) 
           for sheet_name in xl_file.sheet_names}
 
 # Data from each sheet can be accessed via key
 keyList = list(dfs.keys())
+keyList.reverse()
 
 # Data cleansing
 for key, df in dfs.items():
@@ -33,20 +34,18 @@ for key, df in dfs.items():
     dfs[key].loc[:,'Recovered'].fillna(value=0, inplace=True)
     dfs[key]=dfs[key].astype({'Confirmed':'int64', 'Deaths':'int64', 'Recovered':'int64'})
     # Change as China for coordinate search
-    dfs[key]=dfs[key].replace({'Country/Region':'Mainland China'}, 'China')
-    dfs[key]=dfs[key].replace({'Province/State':'Queensland'}, 'Brisbane')
-    dfs[key]=dfs[key].replace({'Province/State':'New South Wales'}, 'Sydney')
-    dfs[key]=dfs[key].replace({'Province/State':'Victoria'}, 'Melbourne')
+    dfs[key]=dfs[key].replace({'Country/Region': 'China'}, 'China')
     # Add a zero to the date so can be convert by datetime.strptime as 0-padded date
-    dfs[key]['Last Update'] = '0' + dfs[key]['Last Update']
+    # dfs[key]['Last Update'] = '0' + dfs[key]['Last Update']
     # Convert time as Australian eastern daylight time
-    dfs[key]['Date_last_updated_AEDT'] = [datetime.strptime(d, '%m/%d/%Y %H:%M') for d in dfs[key]['Last Update']]
-    dfs[key]['Date_last_updated_AEDT'] = dfs[key]['Date_last_updated_AEDT'] + timedelta(hours=16)
+    dfs[key]['Date_last_updated'] = [datetime.strptime(d, '%d/%m/%Y %H:%M') for d in dfs[key]['Last Update']]
+    # dfs[key]['Date_last_updated_AEDT'] = dfs[key]['Date_last_updated_AEDT'] + timedelta(hours=16)
 
 # Add coordinates for each area in the list for the latest table sheet
 # To save time, coordinates calling was done seperately
 # Import the data with coordinates
-dfs[keyList[0]]=pd.read_csv('{}_data.csv'.format(keyList[0]))
+
+dfs[keyList[0]] = pd.read_csv('./data_agg/data_record/{}_data.csv'.format(keyList[0]), encoding="gbk")
 
 # Save numbers into variables to use in the app
 confirmedCases=dfs[keyList[0]]['Confirmed'].sum()
@@ -56,47 +55,47 @@ recoveredCases=dfs[keyList[0]]['Recovered'].sum()
 # Construct confirmed cases dataframe for line plot
 DateList = []
 ChinaList =[]
-OtherList = []
+# OtherList = []
 
 for key, df in dfs.items():
     dfTpm = df.groupby(['Country/Region'])['Confirmed'].agg(np.sum)
     dfTpm = pd.DataFrame({'Code':dfTpm.index, 'Confirmed':dfTpm.values})
     dfTpm = dfTpm.sort_values(by='Confirmed', ascending=False).reset_index(drop=True)
-    DateList.append(df['Date_last_updated_AEDT'][0])
+    DateList.append(df['Date_last_updated'][0])
     ChinaList.append(dfTpm['Confirmed'][0])
-    OtherList.append(dfTpm['Confirmed'][1:].sum())
+    # OtherList.append(dfTpm['Confirmed'][1:].sum())
     
 df_confirmed = pd.DataFrame({'Date':DateList,
-                             'Mainland China':ChinaList,
-                             'Other locations':OtherList})
+                             'China':ChinaList})
+
 # Select the latest data from a given date
 df_confirmed['date_day']=[d.date() for d in df_confirmed['Date']]
-df_confirmed=df_confirmed.groupby(by=df_confirmed['date_day'], sort=False).transform(max).drop_duplicates(['Date'])
-df_confirmed['Total']=df_confirmed['Mainland China']+df_confirmed['Other locations']
-df_confirmed=df_confirmed.reset_index(drop=True)
+df_confirmed = df_confirmed.groupby(by=df_confirmed['date_day'], sort=False).transform(max).drop_duplicates(['Date'])
+df_confirmed['Total']=df_confirmed['China']
+df_confirmed = df_confirmed.reset_index(drop=True)
 plusConfirmedNum = df_confirmed['Total'][0] - df_confirmed['Total'][1]
 plusPercentNum1 = (df_confirmed['Total'][0] - df_confirmed['Total'][1])/df_confirmed['Total'][1]
 
 # Construct recovered cases dataframe for line plot
 DateList = []
 ChinaList =[]
-OtherList = []
+# OtherList = []
 
 for key, df in dfs.items():
     dfTpm = df.groupby(['Country/Region'])['Recovered'].agg(np.sum)
     dfTpm = pd.DataFrame({'Code':dfTpm.index, 'Recovered':dfTpm.values})
     dfTpm = dfTpm.sort_values(by='Recovered', ascending=False).reset_index(drop=True)
-    DateList.append(df['Date_last_updated_AEDT'][0])
+    DateList.append(df['Date_last_updated'][0])
     ChinaList.append(dfTpm['Recovered'][0])
-    OtherList.append(dfTpm['Recovered'][1:].sum())
+    # OtherList.append(dfTpm['Recovered'][1:].sum())
     
 df_recovered = pd.DataFrame({'Date':DateList,
-                             'Mainland China':ChinaList,
-                             'Other locations':OtherList}) 
+                             'China':ChinaList})
+
 # Select the latest data from a given date
 df_recovered['date_day']=[d.date() for d in df_recovered['Date']]
 df_recovered=df_recovered.groupby(by=df_recovered['date_day'], sort=False).transform(max).drop_duplicates(['Date'])
-df_recovered['Total']=df_recovered['Mainland China']+df_recovered['Other locations']
+df_recovered['Total']=df_recovered['China']
 df_recovered=df_recovered.reset_index(drop=True)
 plusRecoveredNum = df_recovered['Total'][0] - df_recovered['Total'][1]
 plusPercentNum2 = (df_recovered['Total'][0] - df_recovered['Total'][1])/df_recovered['Total'][1]
@@ -104,83 +103,84 @@ plusPercentNum2 = (df_recovered['Total'][0] - df_recovered['Total'][1])/df_recov
 # Construct death case dataframe for line plot
 DateList = []
 ChinaList =[]
-OtherList = []
+# OtherList = []
 
 for key, df in dfs.items():
     dfTpm = df.groupby(['Country/Region'])['Deaths'].agg(np.sum)
     dfTpm = pd.DataFrame({'Code':dfTpm.index, 'Deaths':dfTpm.values})
     dfTpm = dfTpm.sort_values(by='Deaths', ascending=False).reset_index(drop=True)
-    DateList.append(df['Date_last_updated_AEDT'][0])
+    DateList.append(df['Date_last_updated'][0])
     ChinaList.append(dfTpm['Deaths'][0])
-    OtherList.append(dfTpm['Deaths'][1:].sum())
+    # OtherList.append(dfTpm['Deaths'][1:].sum())
     
 df_deaths = pd.DataFrame({'Date':DateList,
-                          'Mainland China':ChinaList,
-                          'Other locations':OtherList})
+                          'China':ChinaList})
 # Select the latest data from a given date
 df_deaths['date_day']=[d.date() for d in df_deaths['Date']]
 df_deaths=df_deaths.groupby(by='date_day', sort=False).transform(max).drop_duplicates(['Date'])
-df_deaths['Total']=df_deaths['Mainland China']+df_deaths['Other locations']
+df_deaths['Total']=df_deaths['China']
 df_deaths=df_deaths.reset_index(drop=True)
 plusDeathNum = df_deaths['Total'][0] - df_deaths['Total'][1]
 plusPercentNum3 = (df_deaths['Total'][0] - df_deaths['Total'][1])/df_deaths['Total'][1]
 
 # Create data table to show in app
 # Generate sum values for Country/Region level
-dfCase = dfs[keyList[0]].groupby(by='Country/Region', sort=False).sum().reset_index()
+dfCase = dfs[keyList[0]].groupby(by='Province/State', sort=False).sum().reset_index()
 dfCase = dfCase.sort_values(by=['Confirmed'], ascending=False).reset_index(drop=True)
 # As lat and lon also underwent sum(), which is not desired, remove from this table.
 dfCase = dfCase.drop(columns=['lat','lon'])
 
 # Grep lat and lon by the first instance to represent its Country/Region
-dfGPS = dfs[keyList[0]].groupby(by=['Country/Region'], sort=False).first().reset_index()
-dfGPS = dfGPS[['Country/Region','lat','lon']]
+dfGPS = dfs[keyList[0]].groupby(by=['Province/State'], sort=False).first().reset_index()
+dfGPS = dfGPS[['Province/State','lat','lon']]
 
 # Merge two dataframes
-dfSum = pd.merge(dfCase, dfGPS, how='inner', on='Country/Region')
-dfSum = dfSum.replace({'Country/Region':'China'}, 'Mainland China')
+dfSum = pd.merge(dfCase, dfGPS, how='inner', on='Province/State')
+# dfSum = dfSum.replace({'Country/Region':'China'}, 'China')
 # Rearrange columns to correspond to the number plate order
-dfSum = dfSum[['Country/Region','Confirmed','Recovered','Deaths','lat','lon']]
+dfSum = dfSum[['Province/State','Confirmed','Recovered','Deaths','lat','lon']]
 
 # Save numbers into variables to use in the app
-latestDate=datetime.strftime(df_confirmed['Date'][0], '%b %d %Y %H:%M AEDT')
-secondLastDate=datetime.strftime(df_confirmed['Date'][1], '%b %d')
-daysOutbreak=(df_confirmed['Date'][0] - datetime.strptime('12/31/2019', '%m/%d/%Y')).days
+
+latestDate=datetime.strftime(df_confirmed['Date'][1], '%b %d %Y %H:%M')
+secondLastDate=datetime.strftime(df_confirmed['Date'][0], '%b %d')
+daysOutbreak=(df_confirmed['Date'][1] - datetime.strptime('31/12/2019', '%d/%m/%Y')).days
 
 #############################################################################################
 #### Start to make plots
 #############################################################################################
 # Line plot for confirmed cases
 # Set up tick scale based on confirmed case number
-tickList = list(np.arange(0, df_confirmed['Mainland China'].max()+1000, 5000))
+tickList = list(np.arange(0, df_confirmed['China'].max()+1000, 5000))
 
 # Create empty figure canvas
 fig_confirmed = go.Figure()
 # Add trace to the figure
-fig_confirmed.add_trace(go.Scatter(x=df_confirmed['Date'], y=df_confirmed['Mainland China'],
+
+fig_confirmed.add_trace(go.Scatter(x=df_confirmed['Date'], y=df_confirmed['China'],
                                    mode='lines+markers',
                                    line_shape='spline',
-                                   name='Mainland China',
+                                   name='China',
                                    line=dict(color='#921113', width=3),
                                    marker=dict(size=8, color='#f4f4f2',
                                                line=dict(width=1,color='#921113')),
-                                   text=[datetime.strftime(d, '%b %d %Y AEDT') for d in df_confirmed['Date']],
-                                   hovertext=['Mainland China confirmed<br>{:,d} cases<br>'.format(i) for i in df_confirmed['Mainland China']],
+                                   text=[datetime.strftime(d, '%b %d %Y') for d in df_confirmed['Date']],
+                                   hovertext=['China confirmed<br>{:,d} cases<br>'.format(i) for i in df_confirmed['China']],
                                    hovertemplate='<b>%{text}</b><br></br>'+
                                                  '%{hovertext}'+
                                                  '<extra></extra>'))
-fig_confirmed.add_trace(go.Scatter(x=df_confirmed['Date'], y=df_confirmed['Other locations'],
-                                   mode='lines+markers',
-                                   line_shape='spline',
-                                   name='Other Region',
-                                   line=dict(color='#eb5254', width=3),
-                                   marker=dict(size=8, color='#f4f4f2',
-                                               line=dict(width=1,color='#eb5254')),
-                                   text=[datetime.strftime(d, '%b %d %Y AEDT') for d in df_confirmed['Date']],
-                                   hovertext=['Other region confirmed<br>{:,d} cases<br>'.format(i) for i in df_confirmed['Other locations']],
-                                   hovertemplate='<b>%{text}</b><br></br>'+
-                                                 '%{hovertext}'+
-                                                 '<extra></extra>'))
+# fig_confirmed.add_trace(go.Scatter(x=df_confirmed['Date'], y=df_confirmed['Other locations'],
+#                                    mode='lines+markers',
+#                                    line_shape='spline',
+#                                    name='Other Region',
+#                                    line=dict(color='#eb5254', width=3),
+#                                    marker=dict(size=8, color='#f4f4f2',
+#                                                line=dict(width=1,color='#eb5254')),
+#                                    text=[datetime.strftime(d, '%b %d %Y AEDT') for d in df_confirmed['Date']],
+#                                    hovertext=['Other region confirmed<br>{:,d} cases<br>'.format(i) for i in df_confirmed['Other locations']],
+#                                    hovertemplate='<b>%{text}</b><br></br>'+
+#                                                  '%{hovertext}'+
+#                                                  '<extra></extra>'))
 # Customise layout
 fig_confirmed.update_layout(
 #    title=dict(
@@ -224,7 +224,7 @@ fig_confirmed.update_layout(
 
 # Line plot for combine cases
 # Set up tick scale based on confirmed case number
-tickList = list(np.arange(0, df_recovered['Mainland China'].max()+200, 500))
+tickList = list(np.arange(0, df_recovered['China'].max()+200, 500))
 
 # Create empty figure canvas
 fig_combine = go.Figure()
@@ -236,7 +236,7 @@ fig_combine.add_trace(go.Scatter(x=df_recovered['Date'], y=df_recovered['Total']
                                    line=dict(color='#168038', width=3),
                                    marker=dict(size=8, color='#f4f4f2',
                                                line=dict(width=1,color='#168038')),
-                                   text=[datetime.strftime(d, '%b %d %Y AEDT') for d in df_recovered['Date']],
+                                   text=[datetime.strftime(d, '%b %d %Y') for d in df_recovered['Date']],
                                    hovertext=['Total recovered<br>{:,d} cases<br>'.format(i) for i in df_recovered['Total']],
                                    hovertemplate='<b>%{text}</b><br></br>'+
                                                  '%{hovertext}'+
@@ -248,7 +248,7 @@ fig_combine.add_trace(go.Scatter(x=df_deaths['Date'], y=df_deaths['Total'],
                                 line=dict(color='#626262', width=3),
                                 marker=dict(size=8, color='#f4f4f2',
                                             line=dict(width=1,color='#626262')),
-                                text=[datetime.strftime(d, '%b %d %Y AEDT') for d in df_deaths['Date']],
+                                text=[datetime.strftime(d, '%b %d %Y') for d in df_deaths['Date']],
                                 hovertext=['Total death<br>{:,d} cases<br>'.format(i) for i in df_deaths['Total']],
                                 hovertemplate='<b>%{text}</b><br></br>'+
                                               '%{hovertext}'+
@@ -296,35 +296,35 @@ fig_combine.update_layout(
 
 # Line plot for death rate cases
 # Set up tick scale based on confirmed case number
-tickList = list(np.arange(0, (df_deaths['Mainland China']/df_confirmed['Mainland China']*100).max(), 0.5))
+tickList = list(np.arange(0, (df_deaths['China']/df_confirmed['China']*100).max(), 0.5))
 
 # Create empty figure canvas
 fig_rate = go.Figure()
 # Add trace to the figure
-fig_rate.add_trace(go.Scatter(x=df_deaths['Date'], y=df_deaths['Mainland China']/df_confirmed['Mainland China']*100,
+fig_rate.add_trace(go.Scatter(x=df_deaths['Date'], y=df_deaths['China']/df_confirmed['China']*100,
                                 mode='lines+markers',
                                 line_shape='spline',
-                                name='Mainland China',
+                                name='China',
                                 line=dict(color='#626262', width=3),
                                 marker=dict(size=8, color='#f4f4f2',
                                             line=dict(width=1,color='#626262')),
-                                text=[datetime.strftime(d, '%b %d %Y AEDT') for d in df_deaths['Date']],
-                                hovertext=['Mainland China death rate<br>{:.2f}%'.format(i) for i in df_deaths['Mainland China']/df_confirmed['Mainland China']*100],
+                                text=[datetime.strftime(d, '%b %d %Y') for d in df_deaths['Date']],
+                                hovertext=['China death rate<br>{:.2f}%'.format(i) for i in df_deaths['China']/df_confirmed['China']*100],
                                 hovertemplate='<b>%{text}</b><br></br>'+
                                               '%{hovertext}'+
                                               '<extra></extra>'))
-fig_rate.add_trace(go.Scatter(x=df_deaths['Date'], y=df_deaths['Other locations']/df_confirmed['Other locations']*100,
-                                mode='lines+markers',
-                                line_shape='spline',
-                                name='Other region',
-                                line=dict(color='#a7a7a7', width=3),
-                                marker=dict(size=8, color='#f4f4f2',
-                                            line=dict(width=1,color='#a7a7a7')),
-                                text=[datetime.strftime(d, '%b %d %Y AEDT') for d in df_deaths['Date']],
-                                hovertext=['Other region death rate<br>{:.2f}%'.format(i) for i in df_deaths['Other locations']/df_confirmed['Other locations']*100],
-                                hovertemplate='<b>%{text}</b><br></br>'+
-                                              '%{hovertext}'+
-                                              '<extra></extra>'))
+# fig_rate.add_trace(go.Scatter(x=df_deaths['Date'], y=df_deaths['Other locations']/df_confirmed['Other locations']*100,
+#                                 mode='lines+markers',
+#                                 line_shape='spline',
+#                                 name='Other region',
+#                                 line=dict(color='#a7a7a7', width=3),
+#                                 marker=dict(size=8, color='#f4f4f2',
+#                                             line=dict(width=1,color='#a7a7a7')),
+#                                 text=[datetime.strftime(d, '%b %d %Y AEDT') for d in df_deaths['Date']],
+#                                 hovertext=['Other region death rate<br>{:.2f}%'.format(i) for i in df_deaths['Other locations']/df_confirmed['Other locations']*100],
+#                                 hovertemplate='<b>%{text}</b><br></br>'+
+#                                               '%{hovertext}'+
+#                                               '<extra></extra>'))
 
 # Customise layout
 fig_rate.update_layout(
@@ -403,18 +403,19 @@ app.index_string = """<!DOCTYPE html>
 
 server = app.server
 
+
 app.layout = html.Div(style={'backgroundColor':'#f4f4f2'},
     children=[
         html.Div(
             id="header",
             children=[                          
-                html.H4(children="Coronavirus (2019-nCoV) Outbreak Global Cases Monitor"),
+                html.H4(children="2019-nCoV Outbreak China Cases Monitor"),
                 html.P(
                     id="description",
                     children="On Dec 31, 2019, the World Health Organization (WHO) was informed of \
                     an outbreak of “pneumonia of unknown cause” detected in Wuhan City, Hubei Province, China – the \
                     seventh-largest city in China with 11 million residents. As of {}, there are over {:,d} cases \
-                    of 2019-nCoV confirmed globally.\
+                    of 2019-nCoV confirmed in China.\
                     This dash board is developed to visualise and track the recent reported \
                     cases on a daily timescale.".format(latestDate, confirmedCases),
                 ),
@@ -447,8 +448,10 @@ app.layout = html.Div(style={'backgroundColor':'#f4f4f2'},
                                   html.H3(style={'textAlign':'center',
                                                  'fontWeight':'bold','color':'#d7191c'},
                                                 children=[
-                                                    html.P(style={'padding':'.5rem'},
-                                                              children='+ {:,d} from yesterday ({:.1%})'.format(plusConfirmedNum, plusPercentNum1)),
+                                                     html.P(style={'color':'#cbd2d3','padding':'.5rem'},
+                                                              children='xxxx xxxx xxxxxxxxx xxxxx'),
+                                                    # html.P(style={'padding':'.5rem'},
+                                                    #           children='+ {:,d} from yesterday ({:.1%})'.format(plusConfirmedNum, plusPercentNum1)),
                                                     '{:,d}'.format(confirmedCases)
                                                          ]),
                                   html.H5(style={'textAlign':'center','color':'#d7191c','padding':'.1rem'},
@@ -461,8 +464,10 @@ app.layout = html.Div(style={'backgroundColor':'#f4f4f2'},
                                   html.H3(style={'textAlign':'center',
                                                        'fontWeight':'bold','color':'#1a9622'},
                                                children=[
-                                                   html.P(style={'padding':'.5rem'},
-                                                              children='+ {:,d} from yesterday ({:.1%})'.format(plusRecoveredNum, plusPercentNum2)),
+                                                        html.P(style={'color':'#cbd2d3','padding':'.5rem'},
+                                                              children='xxxx xxxx xxxxxxxxx xxxxx'),
+                                                   # html.P(style={'padding':'.5rem'},
+                                                   #            children='+ {:,d} from yesterday ({:.1%})'.format(plusRecoveredNum, plusPercentNum2)),
                                                    '{:,d}'.format(recoveredCases),
                                                ]),
                                   html.H5(style={'textAlign':'center','color':'#1a9622','padding':'.1rem'},
@@ -475,8 +480,10 @@ app.layout = html.Div(style={'backgroundColor':'#f4f4f2'},
                                   html.H3(style={'textAlign':'center',
                                                        'fontWeight':'bold','color':'#6c6c6c'},
                                                 children=[
-                                                    html.P(style={'padding':'.5rem'},
-                                                              children='+ {:,d} from yesterday ({:.1%})'.format(plusDeathNum, plusPercentNum3)),
+                                                         html.P(style={'color':'#cbd2d3','padding':'.5rem'},
+                                                              children='xxxx xxxx xxxxxxxxx xxxxx'),
+                                                    # html.P(style={'padding':'.5rem'},
+                                                    #           children='+ {:,d} from yesterday ({:.1%})'.format(plusDeathNum, plusPercentNum3)),
                                                     '{:,d}'.format(deathsCases)
                                                 ]),
                                   html.H5(style={'textAlign':'center','color':'#6c6c6c','padding':'.1rem'},
@@ -575,11 +582,11 @@ app.layout = html.Div(style={'backgroundColor':'#f4f4f2'},
                                       'and ', 
                                       html.A('JHU CSSE', href='https://docs.google.com/spreadsheets/d/1yZv9w9z\
                                       RKwrGTaR-YzmAqMefw4wMlaXocejdxZaTs6w/htmlview?usp=sharing&sle=true#'),
-                                      " | 🙏 Pray for China, Pray for the World 🙏 |",
-                                      " Developed by ",html.A('Jun', href='https://junye0798.com/')," with ❤️"])])
-
+                                      " | Pray for China, Pray for the World|",
+                                      " Developed by ",html.A('Jun', href='https://junye0798.com/')," with ❤️",
+                                      " |Rewrite by ", html.A('DML & LWJ'),
+                                      ])])
             ])
-
 @app.callback(
     Output('datatable-interact-map', 'figure'),
     [Input('datatable-interact-location', 'derived_virtual_selected_rows')]
@@ -597,20 +604,17 @@ def update_figures(derived_virtual_selected_rows):
     # the component.
     if derived_virtual_selected_rows is None:
         derived_virtual_selected_rows = []
-        
+
     dff = dfSum
-        
+
     mapbox_access_token = "pk.eyJ1IjoicGxvdGx5bWFwYm94IiwiYSI6ImNqdnBvNDMyaTAxYzkzeW5ubWdpZ2VjbmMifQ.TXcBE-xg9BFdV2ocecc_7g"
 
     # Generate a list for hover text display
     textList=[]
     for area, region in zip(dfs[keyList[0]]['Province/State'], dfs[keyList[0]]['Country/Region']):
-        
+
         if type(area) is str:
-            if region == "Hong Kong" or region == "Macau" or region == "Taiwan":
-                textList.append(area)
-            else:
-                textList.append(area+', '+region)
+            textList.append(area+', '+region)
         else:
             textList.append(region)
 
@@ -620,7 +624,7 @@ def update_figures(derived_virtual_selected_rows):
         mode='markers',
         marker=go.scattermapbox.Marker(
             color='#ca261d',
-            size=dfs[keyList[0]]['Confirmed'].tolist(), 
+            size=dfs[keyList[0]]['Confirmed'].tolist(),
             sizemin=4,
             sizemode='area',
             sizeref=2.*max(dfs[keyList[0]]['Confirmed'].tolist())/(150.**2),
@@ -645,7 +649,7 @@ def update_figures(derived_virtual_selected_rows):
             # The direction you're facing, measured clockwise as an angle from true north on a compass
             bearing=0,
             center=go.layout.mapbox.Center(
-                lat=3.684188 if len(derived_virtual_selected_rows)==0 else dff['lat'][derived_virtual_selected_rows[0]], 
+                lat=3.684188 if len(derived_virtual_selected_rows)==0 else dff['lat'][derived_virtual_selected_rows[0]],
                 lon=148.374024 if len(derived_virtual_selected_rows)==0 else dff['lon'][derived_virtual_selected_rows[0]]
             ),
             pitch=0,
@@ -656,5 +660,6 @@ def update_figures(derived_virtual_selected_rows):
     return fig2
 
 if __name__ == "__main__":
-    app.run_server(debug=True)
 
+    while True:
+        app.run_server(debug=True)
